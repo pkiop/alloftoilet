@@ -44,10 +44,10 @@ bool paid = false;
 bool state = false;
 bool openstate = false;
 bool RFIDnotopened = true;
+
 int openANDclosetime = 3000;
 int RFIDinitcnt = 0;
 int RFIDnotcnt = 0;
-
 
 void Allprint(const char* ch) { //주의 btwrite 지우면 AT 못쓴다.
   btSerial.write(ch);
@@ -56,9 +56,8 @@ void Allprint(const char* ch) { //주의 btwrite 지우면 AT 못쓴다.
   lcd.print(ch);
 }
 
-
 int counter = 0;
-bool NoHumanTimeCounter() {//false 가 사람 있다 
+bool NoHumanTimeCounter() {//false 가 사람 있다
   if (!Appright || !paid) {
     return true;
   }
@@ -102,69 +101,50 @@ void BTtoSerialmoniter() {
   }
 }
 
-void process() {
-  //  Serial.print("Appright : ");
-  //  Serial.println(Appright);
-  //  Serial.print("paid : ");
-  //  Serial.println(paid);
-  //  Serial.print("NOTusing : ");
-  //  Serial.println(NOTusing);
-  //  Serial.println("ButtonPin : ");
-  //  Serial.println(digitalRead(ButtonPin));
-  if (btSerial.available())
-  {
-    delay(5);
-    while (btSerial.available()) // 앱에서 온 데이터 다 받아 들일때까지 (보통 char 1개)
-    {
-      byte data = btSerial.read();
-      if (data == '$') { // 사용 요청
-        if (!NOTusing) {  // 사용중이면 사용할 수 없다고 출력
-          const char* ch = "can't use\n";
-          Allprint(ch);
-        }
-        else {
-          const char* ch = "ads\n";
-          Allprint(ch);
-          delay(1000);
-          btSerial.write("okuse\n");
-          Appright = true;
-        }
-      }
-      if (data == '^' && Appright == true) { // 돈 내면 확인
-        paid = true;
-        Allprint("ok paid\n");
-      }
-      if (Appright && paid == true && NOTusing) { // 앱으로 문열기
-        for (angle = 10; angle < 170; angle++) {
-          servo.write(angle);
-          delay(10);
-        }
-        openstate = true;
-        NOTusing = false;
-        Allprint("open\n");
-        delay(openANDclosetime); // 7초뒤 자동 문닫기
-        for (angle = 170; angle > 10; angle--)
-        {
-          servo.write(angle);
-          delay(10);
-        }
-        openstate = false;
-        Allprint("autoclose\n");
-      }
-
-
+void Apprequest(char data){
+  if (data == '$') { // 사용 요청
+    if (!NOTusing) {  // 사용중이면 사용할 수 없다고 출력
+      const char* ch = "can't use\n";
+      Allprint(ch);
+    }
+    else {
+      const char* ch = "ask\n";
+      Allprint(ch);
+      delay(1000);
+      btSerial.write("okuse\n");
+      Appright = true;
     }
   }
+}
 
-//  Serial.print("Appright : ");
-//  Serial.println(Appright);
-//  Serial.print("paid : ");
-//  Serial.println(paid);
-//  Serial.print("NOTusing : ");
-//  Serial.println(NOTusing);
-//  Serial.println("ButtonPin : ");
-//  Serial.print("state : ");
-//  Serial.println(state);
+void paycheck(char data){
+  if (data == '^' && Appright == true) { // 돈 내면 확인
+    paid = true;
+    Allprint("ok paid\n");
+  }
+}
+
+void OpenByApp(){
+  if (Appright && paid == true && NOTusing) { // 앱으로 문열기
+    for (angle = 10; angle < 170; angle++) {
+      servo.write(angle);
+      delay(10);
+    }
+    openstate = true;
+    NOTusing = false;
+    Allprint("open\n");
+    delay(openANDclosetime); // 7초뒤 자동 문닫기
+    for (angle = 170; angle > 10; angle--)
+    {
+      servo.write(angle);
+      delay(10);
+    }
+    openstate = false;
+    Allprint("autoclose\n");
+  }
+}
+
+void OpenByRFID(){
   if (state && !Appright && NOTusing && RFIDnotopened) { // RFID로 문열기
     for (angle = 10; angle < 170; angle++) {
       servo.write(angle);
@@ -174,7 +154,7 @@ void process() {
     openstate = true;
     NOTusing = false;
     Serial.println("RFID OPEN");
-    //delay 쓰레드로 해야 하는중에 앱 연결 방지 잘 안된다. 
+    //delay 쓰레드로 해야 하는중에 앱 연결 방지 잘 안된다.
     delay(openANDclosetime); // 7초뒤 자동 문닫기
     for (angle = 170; angle > 10; angle--)
     {
@@ -189,12 +169,7 @@ void process() {
   }
 }
 
-void loop()
-{
-
-  NOTusing = NoHumanTimeCounter();
-  BTtoSerialmoniter();
-  process();
+void OpenByButton(){
   if (digitalRead(buttonPin) == true) {
     for (angle = 10; angle < 170; angle++) {
       servo.write(angle);
@@ -215,21 +190,35 @@ void loop()
     paid = false;
     NOTusing = true;
   }
+}
 
-  if(RFIDnotopened == false){ //RFID 반응속도 차이 보정 
+void RFIDdelayComp(){
+  if(RFIDnotopened == false){ //RFID 반응속도 차이 보정
     RFIDnotcnt++;
     if(RFIDnotcnt >= 20){
       RFIDnotcnt = 0;
       RFIDnotopened = true;
     }
   }
+}
 
+void BTprocess() {
+  if (btSerial.available())
+  {
+    delay(5);
+    while (btSerial.available()) // 앱에서 온 데이터 다 받아 들일때까지 (보통 char 1개)
+    {
+      byte data = btSerial.read(); // 앱에서 보낸 char (string 될수도)
+      Apprequest(data);
+      paycheck(data);
+      OpenByApp();
+    }
+  }
+}
 
-
-
+void GetRFIDdata(){
   state = rc522.uid.uidByte[0] == 0x8D;
 
- // Serial.println(rc522.uid.uidByte[0]);
   if (state == true) {
     RFIDinitcnt++;
     if (RFIDinitcnt >= 10) {
@@ -242,10 +231,14 @@ void loop()
   if (!rc522.PICC_IsNewCardPresent()) return;     // Look for new cards
   if (!rc522.PICC_ReadCardSerial()) return;       // Select one of the cards
 }
-// 보류
-// if(digitalRead(HumanPin) && NOTusing){
-//   const char* ch = "using\n";
-//   btSerial.write(ch);
-//   lcd.clear();
-//   lcd.print(ch);
-// }
+
+void loop()
+{
+  NOTusing = NoHumanTimeCounter();
+  BTtoSerialmoniter();
+  BTprocess();
+  OpenByRFID();
+  OpenByButton();
+  RFIDdelayComp();
+  GetRFIDdata();
+}
