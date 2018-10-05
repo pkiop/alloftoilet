@@ -33,14 +33,9 @@ void setup()
   Serial.begin(9600);
   btSerial.begin(9600);
   lcd.backlight(); // backlight를 On 시킵니다.
-  pinMode(8, INPUT);
-
   servo.attach(servoPin);
-  lcd.print("Hello, world!");
-
   SPI.begin();
   rc522.PCD_Init();
-
 }
 
 bool NOTusing = true;
@@ -234,7 +229,7 @@ void loop()
 
   state = rc522.uid.uidByte[0] == 0x8D;
 
-  Serial.println(rc522.uid.uidByte[0]);
+ // Serial.println(rc522.uid.uidByte[0]);
   if (state == true) {
     RFIDinitcnt++;
     if (RFIDinitcnt >= 10) {
